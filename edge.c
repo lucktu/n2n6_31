@@ -2430,7 +2430,7 @@ int main(int argc, char* argv[])
     int     local_port = 0 /* any port */;
     int     mgmt_port = N2N_EDGE_MGMT_PORT; /* 5644 by default */
     char    mgmt_path[108];
-    char    tuntap_dev_name[N2N_IFNAMSIZ] = "edge0";
+    char    tuntap_dev_name[N2N_IFNAMSIZ] = "n2n0";
     char    ip_mode[N2N_IF_MODE_SIZE]="static";
     ipstr_t ip_addr = "";
     int     ip_prefixlen = 24;

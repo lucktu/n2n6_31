@@ -63,7 +63,7 @@ static int set_mac(int fd, const char* dev, n2n_mac_t device_mac) {
     memset(&ifr, 0, sizeof(struct ifreq));
     memcpy(&ifr.ifr_hwaddr.sa_data, device_mac, sizeof(n2n_mac_t));
     strncpy(ifr.ifr_name, dev, IFNAMSIZ);
-    
+
     ifr.ifr_hwaddr.sa_family = ARPHRD_ETHER;
     rc = ioctl(fd, SIOCSIFHWADDR, &ifr);
     if (rc < 0) {
@@ -144,7 +144,7 @@ static int set_device_state(const tuntap_dev* device, bool up) {
     return 0;
 }
 
-static int set_ipaddress(const tuntap_dev* device, int static_address) {    
+static int set_ipaddress(const tuntap_dev* device, int static_address) {
     int ifnum = if_nametoindex(device->dev_name);
     traceEvent(TRACE_DEBUG, "if_nametoindex(%s) %d\n", device->dev_name, ifnum);
 
@@ -186,7 +186,7 @@ static int set_ipaddress(const tuntap_dev* device, int static_address) {
     req.nl.nlmsg_len = NLMSG_ALIGN(req.nl.nlmsg_len) + rta->rta_len;
     memcpy(RTA_DATA(rta), &device->mtu, sizeof(uint32_t));
 
-    
+
 
     if ((error = netlink_talk(_sock, &req)) != 0) {
         traceEvent(TRACE_ERROR, "netlink set_mtu %u: [%s]", device->mtu, strerror(error));
@@ -223,7 +223,7 @@ static int set_ipaddress(const tuntap_dev* device, int static_address) {
         req.nl.nlmsg_len  = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
         req.nl.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE |NLM_F_ACK;
         req.nl.nlmsg_type = RTM_NEWADDR;
-        
+
         memset(&req.ifaddr, 0, sizeof(req.ifaddr));
         req.ifaddr.ifa_family = AF_INET6;
         req.ifaddr.ifa_index = ifnum;
@@ -248,7 +248,7 @@ static int set_ipaddress(const tuntap_dev* device, int static_address) {
         return -1;
     }
 
-    uint32_t address_size = 0; 
+    uint32_t address_size = 0;
     if (device->routes) {
         req.nl.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_ACK;
         req.nl.nlmsg_type = RTM_NEWROUTE;
@@ -271,7 +271,7 @@ static int set_ipaddress(const tuntap_dev* device, int static_address) {
             req.nl.nlmsg_len  = NLMSG_LENGTH(sizeof(struct rtmsg));
             req.rt.rtm_family = r->family;
             req.rt.rtm_dst_len = r->prefixlen;
-            
+
             // 1st attribute: DST address
             rta = (struct rtattr *)(((uint8_t*) &req) + NLMSG_ALIGN(req.nl.nlmsg_len));
             rta->rta_type = RTA_DST;
@@ -298,8 +298,35 @@ static int set_ipaddress(const tuntap_dev* device, int static_address) {
             }
         }
     }
-    
+
     close(_sock);
+    return 0;
+}
+
+static int find_next_n2n_interface(char* if_name, size_t if_name_len) {
+    struct if_nameindex *if_ni, *i;
+    int max_num = -1;
+
+    if_ni = if_nameindex();
+    if (if_ni == NULL) {
+        traceEvent(TRACE_ERROR, "if_nameindex() failed: %s", strerror(errno));
+        return -1;
+    }
+
+    // Find highest numbered n2n interface
+    for (i = if_ni; !(i->if_index == 0 && i->if_name == NULL); i++) {
+        if (strncmp(i->if_name, "n2n", 3) == 0) {
+            int num = atoi(i->if_name + 3);
+            if (num > max_num) {
+                max_num = num;
+            }
+        }
+    }
+
+    if_freenameindex(if_ni);
+
+    // Set next interface name (n2n0 if no existing interfaces found)
+    snprintf(if_name, if_name_len, "n2n%d", max_num + 1);
     return 0;
 }
 
@@ -311,7 +338,7 @@ static int set_ipaddress(const tuntap_dev* device, int static_address) {
  *  to configure address/mask and MTU.
  *
  *  @param device      - [inout] a device info holder object
- *  @param dev         - user-defined name for the new iface, 
+ *  @param dev         - user-defined name for the new iface,
  *                       if NULL system will assign a name
  *  @param device_ip   - address of iface
  *  @param device_mask - netmask for device_ip
@@ -324,6 +351,12 @@ int tuntap_open(tuntap_dev *device, struct tuntap_config* config) {
     char *tuntap_device = "/dev/net/tun";
     struct ifreq ifr;
     int rc;
+
+    if (strcmp(config->if_name, "n2n0") == 0) {
+        if (find_next_n2n_interface(config->if_name, N2N_IFNAMSIZ) < 0) {
+            traceEvent(TRACE_WARNING, "Failed to scan interfaces, using n2n0");
+        }
+    }
 
     device->fd = open(tuntap_device, O_RDWR | O_CLOEXEC);
     if(device->fd < 0) {
@@ -395,7 +428,7 @@ void tuntap_get_address(struct tuntap_dev *tuntap) {
 
     strcpy(ifr.ifr_name, tuntap->dev_name);
     ifr.ifr_addr.sa_family = AF_INET;
-    
+
     res = ioctl(_sock, SIOCGIFADDR, &ifr);
     if (res < 0) {
         perror ("Get ip addr");
